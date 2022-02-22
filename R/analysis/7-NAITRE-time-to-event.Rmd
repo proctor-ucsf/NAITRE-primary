@@ -1,0 +1,212 @@
+---
+title: "NAITRE Trial Time to Event Analysis"
+subtitle: "CONFIDENTIAL. DO NOT DISTRIBUTE."
+author: "Prepared by: Fanice Nyatigo, and Benjamin Arnold<br><br>F.I. Proctor Foundation, University of California, San Francisco"
+date: "updated: `r Sys.time()`"
+output: 
+  html_document:
+    theme: default
+    highlight: default
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+knit: (function(inputFile, encoding) {
+        rmarkdown::render(inputFile, 
+                          encoding   = encoding, 
+                          output_dir = "../../output"
+                          )})
+---
+
+
+
+# Summary
+
+This report includes unmasked results from the NAITRE trial ([NCT03682653](https://clinicaltrials.gov/ct2/show/NCT03682653)). 
+
+The report includes a sensitivity analysis requested during peer review. For the primary outcome, mortality by age 6 months, analyze time-to-event using a Cox proportional hazards model
+
+Should you have any questions regarding this report, please write Dr. Benjamin Arnold (ben.arnold@ucsf.edu).
+
+# Preamble
+```{r preamble, message=FALSE}
+#------------------------------
+# load configuration file
+# includes packages and masked
+# assignments
+#------------------------------
+library(here)
+source(here("NAITRE-primary/R","NAITRE-primary-Config.R"))
+
+#--------------------------------
+# set up for parallel computing
+#--------------------------------
+registerDoParallel(cores = detectCores() - 1)
+
+```
+
+# Load the analysis data
+
+```{r read in clean data} 
+#---------------------------------
+# load the preprocessed data
+# rename public ID to childID
+#---------------------------------
+
+# primary analysis file
+d <- read_rds(here("NAITRE-primary/data/final","NAITRE_primary_analysis_public.rds")) %>% 
+  rename(childID = id_public)
+
+```
+
+## Create time-to-event outcomes
+
+```{r create time-to-event outcomes}
+
+#---------------------------------
+# the variable age_days_180 includes
+# each child's age in days at the 
+# 6m visit OR their age at death/censoring
+# if before that
+#
+# there are 37 children in the
+# dataset for whom this variable
+# is missing — they were all lost
+# after their baseline visit.  For
+# them, assume that they were censored
+# at that time.
+#---------------------------------
+
+d2 <- d %>%
+  mutate(
+    event_time = case_when(
+    !is.na(age_days_180) ~ age_days_180,
+    is.na(age_days_180) ~ as.numeric(age_days_0)
+    ),
+    died = case_when(
+      death_response_180 == 1 ~ 1,
+      death_response_180 == 0 ~ 0,
+      is.na(death_response_180) == TRUE ~ 0,
+      TRUE ~ as.numeric(0)
+    )
+  )
+
+```
+
+
+
+# Survival analysis
+
+## Kaplan-Meier analysis
+
+Examine survival curves for the two groups.  Estimate the Log-Rank Chi-square test statistic and its permutation distribution.
+
+```{r KM analysis}
+#---------------------------------
+# load the survival package
+# this is not currently in the 
+# project's main Config file 
+# because this is an ancillary
+# analysis
+#---------------------------------
+library(survival)
+# safe color blind palette
+# http://jfly.iam.u-tokyo.ac.jp/color/
+# http://www.cookbook-r.com/Graphs/Colors_(ggplot2)/
+cbpal <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+
+#---------------------------------
+# estimate Kaplan-Meier analysis
+# and the LogRank test statistic
+#---------------------------------
+kmfit <- survfit(Surv(event_time,died) ~ tx,data=d2)
+lrtest <- survdiff(Surv(event_time,died) ~ tx,data=d2)
+
+#---------------------------------
+# plot the two survival curves
+#---------------------------------
+pcols <- c("black",cbpal[2])
+plot(kmfit,
+     ylim=c(0,1),
+     xlim=c(7,250),
+     col=pcols,
+     lty=c(1,4),
+     xlab = "age in days",
+     ylab = "survival probability",
+     mark.time = FALSE
+     )
+plot(kmfit,
+     ylim=c(0.99,1),
+     xlim=c(7,250),
+     col=pcols,
+     lty=c(1,4),
+     xlab = "age in days",
+     ylab = "survival probability",
+     mark.time = FALSE
+     )
+legend("topright",legend=c("azithromycin","placebo"),col=rev(pcols),lty=c(4,1),bty="n")
+```
+
+```{r permutation test for logrank}
+#-------------------------------
+# permute the treatment allocation 
+# estimate distribution of the 
+# Log-Rank Chisquare test statistic 
+# under the Null
+#-------------------------------
+null_vec <- foreach(simi = 1:10000, .combine = rbind) %dopar% {
+  set.seed(simi)
+  
+  # pull random numbers the length of treatment vector from uniform distribution 0-1
+  reshuffle_vec <- runif(length(d2$tx))
+  
+  # reshuffle the treatment allocation based on random numbers generated
+  shuffled_tx <- d2$tx[order(reshuffle_vec)]
+
+  # log-rank test on shuffled allocation
+  logranki <- survdiff(Surv(d2$event_time,d2$died) ~ shuffled_tx)
+  
+  # extract and save the coefficient
+  return(logranki$chisq)
+
+}
+
+#-------------------------------
+# calculate the 
+# permutation test p-value
+#-------------------------------
+logrank_permute_p_value <- sum(null_vec > lrtest$chisq) / length(null_vec)
+cat("The permutation P-value for the log-rank chi-square test statistic is:", sprintf("%1.3f",logrank_permute_p_value))
+```
+
+## Cox PH analysis
+
+Consistent with the crossing survival curves above in the Kaplan-Meier estimator, there is slight evidence that the proportional hazards assumption is violated in this study.  Below we plot the time-dependent coefficient beta(t): if the proportional hazards assumption holds then the true function would be a horizontal line.  Note, however, that the survival curves are so compressed due to the low mortality rate that it is unclear how much to infer from the curves crossing within the very narrow range observed.
+
+```{r coxph analysis}
+#-------------------------------
+# fit a cox proportional hazards
+# model
+#-------------------------------
+coxphfit <- coxph(Surv(event_time,died) ~ tx,data=d2)
+print(coxphfit)
+broom::tidy(coxphfit, exponentiate=TRUE, conf.level = 0.95, conf.int = TRUE)
+
+#-------------------------------
+# test the proportional hazards
+# assumption
+#-------------------------------
+coxzphfit <- cox.zph(coxphfit)
+print(coxzphfit)
+plot(coxzphfit)
+```
+
+
+# Session Info
+```{r session info}
+sessionInfo()
+```
+

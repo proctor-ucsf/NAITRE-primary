@@ -1,0 +1,272 @@
+---
+title: "NAITRE Trial Mortality Analysis"
+subtitle: "CONFIDENTIAL. DO NOT DISTRIBUTE."
+author: "Prepared by: Fanice Nyatigo, and Benjamin Arnold<br><br>F.I. Proctor Foundation, University of California, San Francisco"
+date: "updated: `r Sys.time()`"
+output: 
+  html_document:
+    theme: default
+    highlight: default
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+knit: (function(inputFile, encoding) {
+        rmarkdown::render(inputFile, 
+                          encoding   = encoding, 
+                          output_dir = "../../output"
+                          )})
+---
+
+
+# Summary
+
+This report includes unmasked results from the NAITRE trial ([NCT03682653](https://clinicaltrials.gov/ct2/show/NCT03682653)). 
+
+The report summarizes mortality outcomes in the trial.
+
+Should you have any questions regarding this report, please write Dr. Benjamin Arnold (ben.arnold@ucsf.edu).
+
+# Preamble
+```{r preamble, message=FALSE}
+#------------------------------
+# load configuration file
+# includes packages and masked
+# assignments
+#------------------------------
+library(here)
+source(here("NAITRE-primary/R","NAITRE-primary-Config.R"))
+
+#--------------------------------
+# set up for parallel computing
+#--------------------------------
+registerDoParallel(cores = detectCores() - 1)
+
+```
+
+# Load the analysis data
+
+```{r read in clean data} 
+#------------------------------
+# read in the clean data
+# rename public ID to childID
+#------------------------------
+
+# primary analysis file
+df_analysis <- read_rds(here("NAITRE-primary/data/final","NAITRE_primary_analysis_public.rds")) %>% 
+  rename(childID = id_public)
+
+```
+
+
+# Effect on mortality by 6 months
+
+Cumulative incidence of mortality by 6 months is the trial's primary endpoint.
+
+
+### Vital status at 6-months
+
+```{r vital status at six months}
+#-------------------------------
+# use the final child status
+# by 6 months dataset assembled
+# above for the CONSORT flow
+#
+# reverse the tx ordering
+# for table1
+#-------------------------------
+df_analysis %>% 
+  mutate(tx_table1 = factor(tx, levels = c("Azithromycin","Placebo"))
+         ) %>%
+  set_variable_labels(vital_180 = "Vital Status at 6 months") %>%
+  table1(~ vital_180 | tx_table1, data = .)
+```
+
+
+### Vital status at 6-months, in-window
+
+```{r vital status at six months in window}
+#-------------------------------
+# use the final child status
+# by 6 months dataset restricted
+# to measurements in-window
+# age 6 months +/- 6 weeks
+#
+# reverse the tx ordering
+# for table1
+#-------------------------------
+df_analysis %>% 
+  filter(death_status_180 %in% c("Measured, in-window", "Event prior to window")) %>%
+  mutate(tx_table1 = factor(tx, levels = c("Azithromycin","Placebo"))) %>%
+  set_variable_labels(vital_180 = "Vital Status at 6 months among measurements in-window") %>%
+  table1(~ vital_180 | tx_table1, data = .)
+```
+
+<br>The primary analysis below reports a complete case analysis that excluded children lost to follow-up at 6 months (moved or had unknown status) when estimating the hazard ratio and its 95% CI. However, all children (present and missing) were included in the permutation test and resulting _P_-value.
+
+### Hazard ratio permutation distribution 
+
+Manually code the permutation test for the log(HR).  This code was folded into a function, `calc_ratio_pval()`, that is used for all primary inference. Retain the original here for internal comparison.
+
+```{r glm model estimate of the HR}
+#-------------------------------
+# use the final child status
+# by 6 months 
+#
+# set children with Moved
+# or Unknown status to missing
+#
+# They will thus be excluded
+# from the HR model estimates
+# and permutation test
+#-------------------------------
+model_df <- df_analysis %>%
+  filter(death_status_180 %in% c("Measured, in-window", "Event prior to window"))
+
+#-------------------------------
+# run the model
+#-------------------------------
+mod_empir <- glm(death_response_180 ~ tx, data = model_df, family = binomial(link = cloglog))
+
+# save a model summary
+mod_summary <- summary(mod_empir) 
+
+# save the log HR and its SE
+coef_empir <- mod_summary$coef[2,1]
+se_empir <- mod_summary$coef[2,2]
+
+# calculate the upper and lower limits on the HR ratio (coefficient from the model)
+upper_empir <- exp(coef_empir+(1.96*se_empir)) %>% round(3)
+lower_empir <- exp(coef_empir-(1.96*se_empir)) %>% round(3)
+coef_empir_exp <- exp(coef_empir) %>% round(3)
+```
+
+```{r generate the null permutation distribution}
+#-------------------------------
+# permute the treatment allocation and rerun the model to 
+# estimate distribution of the model coefficient under the Null
+#-------------------------------
+vitalstatus <- model_df$death_response_180
+tx_alloc <- model_df$tx
+
+Npermute <- 10000
+null_vec <- foreach(simi = 1:Npermute, .combine = rbind) %dopar% {
+  set.seed(simi)
+  
+  # pull random numbers the length of treatment vector from uniform distribution 0-1
+  reshuffle_vec <- runif(length(tx_alloc))
+  
+  # reshuffle the treatment allocation based on random numbers generated
+  shuffled_tx <- tx_alloc[order(reshuffle_vec)]
+ 
+   # subset to non-missing obs
+  vitalstatusi <- vitalstatus[!is.na(vitalstatus)]
+  shuffled_tx <- shuffled_tx[!is.na(vitalstatus)]
+  
+  # run the model on shuffled allocation
+  modi <- glm(vitalstatusi ~ shuffled_tx, family = binomial(link = "cloglog"))
+  
+  # extract and save the coefficient
+  return(modi$coefficients[2])
+
+}
+
+#-------------------------------
+# calculate the 2-sided 
+# permutation test p-value
+#-------------------------------
+p_value <- sum(abs(null_vec) > abs(coef_empir)) / length(null_vec)
+```
+
+
+Permutation distribution of the log hazard ratio under the null hypothesis. The vertical black line represents the estimated log hazard ratio using the actual treatment assignments.
+
+```{r histogram of the null distribution, echo = FALSE, warning = FALSE, message = FALSE, fig.width = 5, fig.height = 5}
+#-------------------------------
+# plot the null distribution 
+# with the empirical value
+#-------------------------------
+df <- data.frame(null_vec=null_vec)
+ggplot(df, aes(x=null_vec)) + 
+  geom_histogram(alpha=0.5, color=NA) +
+  geom_vline(xintercept = coef_empir, color="black") +
+  xlab("Null distribution of log(HR)") +
+  theme_bw()
+```
+
+Permutation test two-sided p-value: `r sprintf("%1.2f",p_value)`
+
+### Mortality comparison
+
+Repeat the analysis, using the general functions that are used throughout the primary, secondary, and subgroup analyses for internal comparison.
+
+```{r prepare vital status table}
+#-------------------------------
+# summary of children and deaths
+#-------------------------------
+df_inwindow180 <- df_analysis %>% 
+  filter(death_status_180 %in% c("Measured, in-window", "Event prior to window"))
+
+df_mortality <- 
+  calc_ratio_pval(df = df_inwindow180,
+                  var = "6-month mortality", 
+                  outcome = death_response_180, 
+                  dist_link = "binomial_clglg",
+                  N = Npermute) %>% 
+  mutate(ratio = paste0(sprintf("%1.2f",ratio), " (", 
+                     sprintf("%1.2f",lower), " to ", 
+                     sprintf("%1.2f",upper), ")")) %>% 
+  select(-c(coef, lower, upper))
+
+# render table
+knitr::kable(df_mortality, 
+             digits = 2,
+             col.names = c("Outcome", "N Children", "N Deaths", "%", "N Children",
+                     "N Deaths", "%", "HR (95% CI)", "P-value*"),
+             caption = "Cumulative incidence of mortality by 6 months and hazard ratio (HR) for comparison between arms in children measured within the pre-specified 225-day window, estimated using binomial regression with a complementary log-log link."
+      ) %>%
+  kable_styling(bootstrap_options = "striped",full_width = TRUE) %>%
+  add_header_above(c(" " = 1, "Azithromycin" = 3, "Placebo" = 3, " " = 2)) %>%
+  footnote(symbol = c("Permutation P-value (10,000 replicates)"))
+```
+
+### Sensitivity Analysis
+
+Conduct a sensitivity analysis that includes children who were still measured at 6 months, but were measured out of window.
+
+This includes 1,652 additional children but none of them died by the 6-month visit. Therefore, estimates are nearly identical to the primary analysis.
+
+```{r sensitivity analysis to include out of window children}
+df_all180 <- df_analysis %>% 
+  filter(death_status_180 %in% c("Measured, out-of-window", "Measured, in-window", "Event prior to window"))
+
+df_survival <- 
+  calc_ratio_pval(df = df_all180,
+                  var = "6-month mortality", 
+                  outcome = death_response_180, 
+                  dist_link = "binomial_clglg",
+                  N = Npermute) %>% 
+  mutate(ratio = paste0(sprintf("%1.2f",ratio), " (", 
+                     sprintf("%1.2f",lower), " to ", 
+                     sprintf("%1.2f",upper), ")")) %>% 
+  select(-c(coef, lower, upper))
+  
+# render table
+knitr::kable(df_survival, 
+             digits = 2,
+             col.names = c("Outcome", "N Children", "N Deaths", "%", "N Children",
+                     "N Deaths", "%", "HR (95% CI)", "P-value*"),
+             caption = "Cumulative incidence of mortality by 6 months and hazard ratio (HR) for comparison between arms including the children measured out of the 225-day window, estimated using binomial regression with a complementary log-log link."
+      ) %>%
+  kable_styling(bootstrap_options = "striped",full_width = TRUE) %>%
+  add_header_above(c(" " = 1, "Azithromycin" = 3, "Placebo" = 3, " " = 2)) %>%
+  footnote(symbol = c("Permutation P-value (10,000 replicates)"))
+```
+
+# Session Info
+```{r session info}
+sessionInfo()
+```
+

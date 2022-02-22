@@ -1,0 +1,106 @@
+---
+title: "NAITRE Trial Post-hoc Minimum Detectable Effect (MDE) Estimates"
+subtitle: "CONFIDENTIAL. DO NOT DISTRIBUTE."
+author: "Prepared by: Fanice Nyatigo, and Benjamin Arnold<br><br>F.I. Proctor Foundation, University of California, San Francisco"
+date: "updated: `r Sys.time()`"
+output: 
+  html_document:
+    theme: default
+    highlight: default
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+knit: (function(inputFile, encoding) {
+        rmarkdown::render(inputFile, 
+                          encoding   = encoding, 
+                          output_dir = "../../output"
+                          )})
+---
+
+
+
+# Summary
+
+This report includes post-hoc estimates of the minimum detectable effect (MDE) for the NAITRE trial ([NCT03682653](https://clinicaltrials.gov/ct2/show/NCT03682653)) based on the primary outcome, all cause mortality by 6 months. 
+
+This information was requested during peer review.
+
+Should you have any questions regarding this report, please write Dr. Benjamin Arnold (ben.arnold@ucsf.edu).
+
+# Preamble
+```{r preamble, message=FALSE}
+#------------------------------
+# clear workspace 
+#
+# no need to use the overall
+# project configuration file
+# for this simple calculation
+#------------------------------
+rm(list=ls())
+
+
+```
+
+# MDE
+
+_How large would the reduction in mortality need to be to have at least 80% power to detect a difference between groups, given the size of the trial and the empirical probability of mortality in the placebo arm?_
+
+In the final analysis, there were 9606 children in the azythromycin group (42 deaths) and 9684 children in the placebo group (50 deaths). 
+
+Below, the calculations assume 9606 children per group. 
+
+```{r mde}
+#-----------------------------
+# empirical mortality proportions
+#-----------------------------
+prob_azithro <- 42/9606
+prob_placebo <- 50/9684
+
+#-----------------------------
+# estimate the MDE given
+# the mortality proportion in the
+# placebo, the sample size and
+# 80% power and type I alpha of 5%
+#-----------------------------
+( mde_mortality <- power.prop.test(n=9606, p2=prob_placebo, sig.level = 0.05, power=0.8, alternative = "two.sided") )
+
+#-----------------------------
+# summarize the MDE in terms
+# of the RR
+#-----------------------------
+( mde_rr <- mde_mortality$p1/mde_mortality$p2 )
+```
+
+The estimated MDE on the relative risk scale given the design and empirical probability of mortality in the placebo arm is **RR = `r sprintf("%1.2f",mde_rr)`.**
+
+## Sensitivity analysis
+
+Repeat the calculation above, assuming the larger 9684 children per group. There is no difference in the MDE.
+
+```{r mde sensitivity}
+( mde_mortality2 <- power.prop.test(n=9684, p2=prob_placebo, sig.level = 0.05, power=0.8, alternative = "two.sided") )
+( mde_rr2 <- mde_mortality2$p1/mde_mortality2$p2 )
+```
+
+Assuming the larger number of children per group, the MDE is still **RR = `r sprintf("%1.2f",mde_rr2)`.**
+
+# Sample size required given the observed effect
+
+_How large would the trial needed to have been to have 80% power to detect the observed 15% relative reduction in mortality (RR=0.85), given the observed mortality rates?_
+
+```{r sampsi}
+( sampsi_mortality <- power.prop.test(p1=prob_azithro,p2=prob_placebo, sig.level = 0.05, power=0.8, alternative = "two.sided") )
+
+```
+
+Given the empirical probabilities of mortality, the trial would have needed to enroll **`r sprintf("%1.0f",round(sampsi_mortality$n))` children** _per group_ (**`r sprintf("%1.0f",round(sampsi_mortality$n)*2)` total children**) to have 80% power.
+
+
+# Session Info
+```{r session info}
+sessionInfo()
+```
+

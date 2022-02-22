@@ -1,0 +1,252 @@
+---
+title: "NAITRE Trial Outcomes Analysis"
+subtitle: "CONFIDENTIAL. DO NOT DISTRIBUTE."
+author: "Prepared by: Fanice Nyatigo, and Benjamin Arnold<br><br>F.I. Proctor Foundation, University of California, San Francisco"
+date: "updated: `r Sys.time()`"
+output: 
+  html_document:
+    theme: default
+    highlight: default
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+knit: (function(inputFile, encoding) {
+        rmarkdown::render(inputFile, 
+                          encoding   = encoding, 
+                          output_dir = "../../output"
+                          )})
+---
+
+
+
+# Summary
+
+This report includes unmasked results from the NAITRE trial ([NCT03682653](https://clinicaltrials.gov/ct2/show/NCT03682653)). 
+
+The report summarizes primary and secondary outcomes in the trial.
+
+Should you have any questions regarding this report, please write Dr. Benjamin Arnold (ben.arnold@ucsf.edu).
+
+# Preamble
+```{r preamble, message=FALSE}
+#------------------------------
+# load configuration file
+# includes packages and masked
+# assignments
+#------------------------------
+library(here)
+source(here("NAITRE-primary/R","NAITRE-primary-Config.R"))
+
+#--------------------------------
+# set up for parallel computing
+#--------------------------------
+registerDoParallel(cores = detectCores() - 1)
+
+```
+
+# Load the analysis data
+
+```{r read in clean data} 
+#---------------------------------
+# load the preprocessed data
+# rename public ID to childID
+#---------------------------------
+
+# primary analysis file
+df_analysis <- read_rds(here("NAITRE-primary/data/final","NAITRE_primary_analysis_public.rds")) %>% 
+  rename(childID = id_public)
+
+```
+
+```{r subset the datasets to analysis datasets}
+#-------------------------------
+# subset analysis dataset 
+# to relevant analysis populations
+# for each outcome
+#-------------------------------
+
+# death
+df_death_180 <- df_analysis %>% filter(death_status_180 %in% c("Measured, in-window", "Event prior to window"))
+df_death_90 <- df_analysis %>% filter(death_status_90 %in% c("Measured, in-window", "Event prior to window"))
+#df_death_neo <- df_analysis %>% filter(death_status_neo %in% c("Measured, in-window", "Event prior to window"))
+
+# death and/or hosp
+df_death_hosp <- df_analysis %>% filter(death_status_180 %in% c("Measured, in-window", "Event prior to window") |
+                                          hosp_status_180 %in% c("Measured, in-window", "Event prior to window"))
+# hospitalization
+df_hosp_180 <- df_analysis %>% filter(hosp_status_180 %in% c("Measured, in-window", "Event prior to window"))
+df_hosp_90 <- df_analysis %>% filter(hosp_status_90 %in% c("Measured, in-window", "Event prior to window"))
+df_hosp_21 <- df_analysis %>% filter(hosp_status_21 %in% c("Measured, in-window"))
+
+# any clinic visits (and reason-specific clinic visits)
+df_clinic_180 <- df_analysis %>% filter(clinic_status_180 %in% c("Measured, in-window", "Event prior to window"))
+df_clinic_90 <- df_analysis %>% filter(clinic_status_90 %in% c("Measured, in-window", "Event prior to window"))
+df_clinic_21 <- df_analysis %>% filter(clinic_status_21 %in% c("Measured, in-window"))
+
+# total clinic visits 
+df_clinic_tot_180 <- df_analysis %>% filter(clinic_status_180 %in% c("Measured, in-window"))
+df_clinic_tot_90 <- df_analysis %>% filter(clinic_status_90 %in% c("Measured, in-window"))
+df_clinic_tot_21 <- df_analysis %>% filter(clinic_status_21 %in% c("Measured, in-window"))
+
+
+```
+
+
+# Secondary outcomes by treatment arm
+
+```{r run the model on all outcomes, warning = F, message = F}
+#-------------------------------
+# set the number of permutation
+# test replicates for P-values
+#-------------------------------
+Npermute <- 10000
+
+#-------------------------------
+# calculate the hr and pvalue 
+# for all relevant binary outcomes
+# and combine into one data frame
+#-------------------------------
+
+all_outcomes <- 
+  rbind(
+    # death
+    calc_ratio_pval(df = df_analysis, var = "Mortality by age 28 days‡", outcome = death_response_28, dist_link = "binomial_clglg", N=Npermute),
+    calc_ratio_pval(df = df_death_90, var = "3-month mortality", outcome = death_response_90, dist_link = "binomial_clglg", N=Npermute),
+    
+    # death and/or hosp    
+    calc_ratio_pval(df = df_death_hosp, var = "Death and/or hospitalization, 6 months", outcome = death_hosp_180, dist_link = "binomial_clglg", N=Npermute),
+    
+    # hospitalization
+    calc_ratio_pval(df = df_hosp_21, var = "Hospitalization- 21 days", outcome = hosp_by_21, dist_link = "binomial_clglg", N=Npermute),
+    calc_ratio_pval(df = df_hosp_90, var = "Hospitalization- 3 months", outcome = hosp_by_90, dist_link = "binomial_clglg", N=Npermute),
+    calc_ratio_pval(df = df_hosp_180, var = "Hospitalization- 6 months", outcome = hosp_by_180, dist_link = "binomial_clglg", N=Npermute),
+    
+    # any clinic
+    calc_ratio_pval(df = df_clinic_21, var = "Clinic, Any- 21 days", outcome = any_clinic_21, dist_link = "binomial_clglg", N=Npermute),
+    calc_ratio_pval(df = df_clinic_90, var = "Clinic, Any- 3 months", outcome = any_clinic_90, dist_link = "binomial_clglg", N=Npermute),
+    calc_ratio_pval(df = df_clinic_180, var = "Clinic, Any- 6 months", outcome = any_clinic_180, dist_link = "binomial_clglg", N=Npermute),
+    
+    # reasons for clinic visit
+    calc_ratio_pval(df = df_clinic_180, var = "Malaria- 6month clinic", outcome = malaria_by_180, dist_link = "binomial_clglg", N=Npermute),
+    calc_ratio_pval(df = df_clinic_180, var = "Pneumonia- 6month clinic", outcome = pneumonia_by_180, dist_link = "binomial_clglg", N=Npermute),
+    calc_ratio_pval(df = df_clinic_180, var = "Diarrhea- 6month clinic", outcome = diarrhea_by_180, dist_link = "binomial_clglg", N=Npermute),
+    calc_ratio_pval(df = df_clinic_180, var = "Fever§- 6month clinic", outcome = fever_by_180, dist_link = "binomial_clglg", N=Npermute),
+    
+    # total clinic
+    calc_ratio_pval(df = df_clinic_tot_21, var = "Clinic, Total- 21 days", outcome = tot_clinic_21, dist_link = "poisson_lglnk", N=Npermute),
+    calc_ratio_pval(df = df_clinic_tot_90, var = "Clinic, Total- 3 months", outcome = tot_clinic_90, dist_link = "poisson_lglnk", N=Npermute),
+    calc_ratio_pval(df = df_clinic_tot_180, var = "Clinic, Total- 6 months", outcome = tot_clinic_180, dist_link = "poisson_lglnk", N=Npermute)
+)
+
+rownames(all_outcomes) <- NULL
+```
+
+## Binary outcomes
+```{r binary outcome table}
+
+# format for pretty output
+binary_outcomes_tab <- all_outcomes %>% 
+  filter(!var %in% c("Clinic, Total- 21 days", "Clinic, Total- 3 months", "Clinic, Total- 6 months")) %>% 
+  mutate(ratio = paste0(sprintf("%1.2f",ratio), " (", 
+                     sprintf("%1.2f",lower), " to ", 
+                     sprintf("%1.2f",upper), ")")) %>% 
+  select(-c(coef, lower, upper))
+
+# render table
+knitr::kable(binary_outcomes_tab,
+             digits = 2,
+             col.names = c("Outcome", "N total", "n outcome", "%", "N total", "n outcome", "%", "HR (95% CI†)", "P-value*")
+      ) %>%
+  kable_styling(bootstrap_options = "striped", full_width = TRUE) %>%
+  add_header_above(c(" " = 1, "Azithromycin" = 3,  "Placebo" = 3, " " = 2)) %>%
+  footnote(symbol = c("Permutation P-value (10,000 replicates)", 
+                      "CI, confidence interval",
+                      "Mortality before 28 days of age", 
+                      "Fever without another diagnosis"))
+```
+
+## Total count outcomes
+```{r count outcome table}
+
+# format for pretty output
+count_outcomes_tab <- all_outcomes %>% 
+  filter(var %in% c("Clinic, Total- 21 days", "Clinic, Total- 3 months", "Clinic, Total- 6 months")) %>% 
+  mutate(ratio = paste0(sprintf("%1.2f",ratio), " (", 
+                     sprintf("%1.2f",lower), " to ", 
+                     sprintf("%1.2f",upper), ")")) %>% 
+  select(-c(coef, lower, upper))
+
+# render table
+knitr::kable(count_outcomes_tab, 
+             digits = 2,
+             col.names = c("Outcome", "N total", "n outcome", "mean", "N total", "n outcome", "mean", "Means Ratio (95% CI†)", "P-value*")
+      ) %>%
+  kable_styling(bootstrap_options = "striped", full_width = TRUE) %>%
+  add_header_above(c(" " = 1, "Azithromycin" = 3,  "Placebo" = 3, " " = 2)) %>%
+  footnote(symbol = c("Permutation P-value (10,000 replicates)", 
+                      "CI, confidence interval"))
+```
+
+# Subgroup analyses for the primary outcome (6-month mortality)
+
+```{r subgroup analyses, warning = F, message = F}
+# re-factor tx and response 
+# to be in the order required for the contingency table
+d_interaction <<- df_death_180 %>% 
+  filter(vital_180 %in% c("Dead", "Alive")) %>% 
+  mutate(tx = factor(tx, levels = c("Azithromycin", "Placebo")),
+         vital_180 = factor(vital_180, levels = c("Dead", "Alive")))
+
+# combine output
+sub_ansys <- 
+  rbind(
+    calc_ratio_pval(df = df_death_180, var = "6-month mortality", outcome = death_response_180, dist_link = "binomial_clglg", N=1) %>% 
+      mutate(grp = "All participants", 
+             p_int = NA_real_) %>% relocate(grp),
+    get_subgroup_ratio(popn = df_death_180, group_var = "age_cat", N=Npermute),
+    get_subgroup_ratio(popn = df_death_180, group_var = "childSex", N=Npermute),
+    get_subgroup_ratio(popn = df_death_180, group_var = "enroll_season", N=Npermute),
+    get_subgroup_ratio(popn = df_death_180, group_var = "region_name", N=Npermute),
+    get_subgroup_ratio(popn = df_death_180, group_var = "urbanicity", N=Npermute), 
+    get_subgroup_ratio(popn = df_death_180, group_var = "breastfeeding", N=Npermute),
+    get_subgroup_ratio(popn = df_death_180, group_var = "weight_cat", N=Npermute)
+    ) %>% 
+  mutate(p_int = round(p_int, digits = 2))
+
+```
+
+```{r subgroup analysis table}
+# format for pretty output
+sub_ansys_tab <- sub_ansys %>% 
+  mutate(ratio = paste0(sprintf("%1.2f",ratio), " (", 
+                     sprintf("%1.2f",lower), " to ", 
+                     sprintf("%1.2f",upper), ")")) %>% 
+  select(-c(var, coef, lower, upper, p_value, p_int))
+
+# render table
+knitr::kable(sub_ansys_tab, 
+             digits = 2,
+             col.names = c("6-month mortality", "N total", "n outcome", "%", "N total", "n outcome", "%", "HR (95% CI)*"),
+             caption = "Cumulative incidence of 6-month mortality by subgroup and hazard ratio (HR) for comparison between arms."
+      ) %>%
+  pack_rows(paste0("By age at enrollment", " \n P for interaction † = ", sub_ansys %>% filter(var == "age_cat") %>% distinct(p_int)), 2, 4) %>% 
+  pack_rows(paste0("By child's sex", " \n P for interaction † = ", sub_ansys %>% filter(var == "childSex") %>% distinct(p_int)), 5, 6) %>%
+  pack_rows(paste0("By season of enrollment", " \n P for interaction † = ", sub_ansys %>% filter(var == "enroll_season") %>% distinct(p_int)), 7, 8) %>%
+  pack_rows(paste0("By region", " \n P for interaction † = ", sub_ansys %>% filter(var == "region_name") %>% distinct(p_int)), 9, 13) %>%
+  pack_rows(paste0("By urbanicity", " \n P for interaction † = ", sub_ansys %>% filter(var == "urbanicity") %>% distinct(p_int)), 14, 16) %>%
+  pack_rows(paste0("By breastfeeding", " \n P for interaction † = ", sub_ansys %>% filter(var == "breastfeeding") %>% distinct(p_int)), 17, 19) %>%
+  pack_rows(paste0("By baseline weight", " \n P for interaction † = ", sub_ansys %>% filter(var == "weight_cat") %>% distinct(p_int)), 20, 21) %>%
+  kable_styling(bootstrap_options = "striped", full_width = TRUE) %>%
+  add_header_above(c(" " = 1, "Azithromycin" = 3,  "Placebo" = 3, " " = 1)) %>%
+  footnote(symbol = c("Hazard Ratio (HR) and 95% confidence interval (CI)",
+                      "Permutation P-value for test of homogeneity (10,000 replicates)"))
+```
+
+# Session Info
+```{r session info}
+sessionInfo()
+```
+

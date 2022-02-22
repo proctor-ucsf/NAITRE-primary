@@ -1,0 +1,145 @@
+---
+title: "NAITRE Trial CONSORT Participant Flow"
+subtitle: "CONFIDENTIAL. DO NOT DISTRIBUTE."
+author: 
+- Fanice Nyatigo fanice.nyatigo@ucsf.edu
+- Ben Arnold ben.arnold@ucsf.edu 
+date: "updated: `r Sys.time()`"
+output: 
+  html_document:
+    theme: default
+    highlight: default
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+knit: (function(inputFile, encoding) {
+        rmarkdown::render(inputFile, 
+                          encoding   = encoding, 
+                          output_dir = "../../output"
+                          )})
+---
+
+# Summary
+
+Track participant flow in the NAITRE trial.
+
+Summarize patient numbers by group to include in a CONSORT flow diagram.
+
+# Configuration
+
+```{r preamble, message = FALSE}
+#---------------------------------
+# source the project's configuration
+# file
+#---------------------------------
+library(here)
+source(here("NAITRE-primary/R","NAITRE-primary-Config.R"))
+```
+
+
+# Load the data
+
+Load the final population tracking dataset. This file was created by `0-NAITRE-primary-data-processing.R`.
+
+```{r load the data}
+#---------------------------------
+# load the preprocessed data
+#---------------------------------
+
+# consort data
+df_consort <- read_rds(here("NAITRE-primary/data/final","NAITRE_consort_public.rds"))
+
+# primary analysis file
+df_analysis <- read_rds(here("NAITRE-primary/data/final","NAITRE_primary_analysis_public.rds"))
+
+```
+
+# CONSORT flow
+
+Participant flow by study visit
+
+## Screening and Enrollment
+```{r consort flow screening}
+#---------------------------------
+# Screening and Enrollment
+#---------------------------------
+dc1 <- df_consort %>% summarise(
+  `Assessed for eligibility`                       = sum(screened == 1),
+  `Excluded (Overall) *`                           = sum(enrolled != 1 | is.na(enrolled)),
+  `Under 8 days old`                               = sum(too_young == 1, na.rm = T),
+  `Over 27 days old`                               = sum(too_old == 1, na.rm = T),
+  `Less than 2500g`                                = sum(ex_weight == 1, na.rm = T),
+  `Cannot orally feed`                             = sum(ex_oral == 1, na.rm = T),
+  `Will not be in the study area for all 6 months` = sum(ex_stay6months == 1, na.rm = T),
+  `Allergy`                                        = sum(ex_allergy == 1, na.rm = T),
+  `Participant in another study`                   = sum(ex_long == 1, na.rm = T),
+  `Lives outside study areas`                      = sum(ex_village == 1, na.rm = T),
+  `Ineligibility reason unknown`                   = sum(unknown == 1, na.rm = T),
+  `Refused`                                        = sum(refused == 1, na.rm = T), 
+  `Enrolled`                                       = sum(enrolled == 1, na.rm = T)
+) %>% 
+  # transpose
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "Variable") %>% 
+  rename(Number = V1) 
+
+kable(dc1) %>% 
+  row_spec(c(1, 2, 13), bold = T, italic = T)
+```
+*Note - the reasons for ineligibility are not mutually exclusive; a child may have more than one reason for exclusion.
+
+## Allocation and Follow-up
+```{r consort flow followup}
+#---------------------------------
+# among participants enrolled
+# identify treatment and 
+# participants lost to follow-up 
+# at various points
+#---------------------------------
+dc2 <- df_consort %>%
+  # restrict to participants enrolled
+  filter(enrolled == 1) %>%
+         # treatment administration
+  mutate(treated = case_when(isAdministered == 1 ~ "Yes",
+                             isAdministered == 2 ~ "No",
+                             is.na(isAdministered) ~ NA_character_),
+         # analyzed for AE?
+         an_ae = factor(an_ae, levels=c(1,0), labels = c("Yes","No")),)
+
+#---------------------------------
+# label the variables for table
+# printing
+#---------------------------------
+
+label(dc2$treated) <- "Treatment Administered"
+label(dc2$an_ae) <- "Assessed for Adverse Events"
+label(dc2$d_21_status) <- "Status, within first 21 days of enrollment"
+label(dc2$d_90_status) <- "Status, 3 months since birth"
+label(dc2$d_180_status) <- "Status, 6 months since birth"
+
+table1(~ treated + an_ae + d_21_status + d_90_status + d_180_status | tx, data = dc2)
+
+```
+
+# Age distribution at 6-month followup
+
+```{r}
+ggplot(
+  df_analysis %>% select(age_days_180), aes(x = age_days_180)) + 
+  geom_histogram(alpha = 1, binwidth = 1) +
+  geom_vline(xintercept = c(141, 225), color="red", linetype = "dashed") +
+  geom_vline(xintercept = 180, color="black", linetype = "dashed") +
+  labs(x = "Age in days", y= "Count", 
+       caption = "*Red lines represent age limit boundaries") +
+  geom_text(aes(x = 180, y = 1000, label = "180 days"))+
+       theme_bw()
+```
+
+# Session Info
+```{r session info}
+sessionInfo()
+```

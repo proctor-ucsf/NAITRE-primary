@@ -1,0 +1,338 @@
+---
+title: "NAITRE Trial Adverse Events Analysis"
+subtitle: "CONFIDENTIAL. DO NOT DISTRIBUTE."
+author: "Prepared by: Fanice Nyatigo, and Benjamin Arnold<br><br>F.I. Proctor Foundation, University of California, San Francisco"
+date: "updated: `r Sys.time()`"
+output: 
+  html_document:
+    theme: default
+    highlight: default
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+knit: (function(inputFile, encoding) {
+        rmarkdown::render(inputFile, 
+                          encoding   = encoding, 
+                          output_dir = "../../output"
+                          )})
+---
+
+# Summary
+
+This report includes unmasked results from the NAITRE trial ([NCT03682653](https://clinicaltrials.gov/ct2/show/NCT03682653)). 
+
+The report summarizes adverse events by day 21 in the trial.
+
+Should you have any questions regarding this report, please write Dr. Benjamin Arnold (ben.arnold@ucsf.edu).
+
+# Preamble
+```{r preamble, message=FALSE}
+#------------------------------
+# load configuration file
+# includes packages and masked
+# assignments
+#------------------------------
+library(here)
+source(here("NAITRE-primary/R","NAITRE-primary-Config.R"))
+
+```
+
+# Load the analysis data
+
+```{r read in clean data} 
+#------------------------------
+# read in the clean data 
+# rename public ID to childID
+#------------------------------
+
+#  primary analysis file
+df_analysis <- read_rds(here("NAITRE-primary/data/final","NAITRE_primary_analysis_public.rds")) %>% 
+  rename(childID = id_public)
+
+```
+
+
+# Adverse Events by 21 days
+
+Tabulation of any ocurrence of each symptom by 21 days among study participants.
+
+```{r SAEs at 21 days}
+#-------------------------------
+# make the SAE variables factor
+# variables for a table
+#-------------------------------
+d_ae_table <- df_analysis %>%
+  mutate(
+    ae_fever_21 = factor(ae_fever_21, levels=c(0,1), labels = c("No","Yes")),
+    ae_abpain_21 = factor(ae_abpain_21, levels=c(0,1), labels = c("No","Yes")),
+    ae_constip_21 = factor(ae_constip_21, levels=c(0,1), labels = c("No","Yes")),
+    ae_rash_21 = factor(ae_rash_21, levels=c(0,1), labels = c("No","Yes")),
+    ae_diarrhea_21 = factor(ae_diarrhea_21, levels=c(0,1), labels = c("No","Yes")),
+    ae_vomiting_21 = factor(ae_vomiting_21, levels=c(0,1), labels = c("No","Yes")),
+    ae_vomitAfterfeeding_21 = factor(ae_vomitAfterfeeding_21, levels=c(0,1), labels = c("No","Yes")),
+    ae_projVomit_21 = factor(ae_projVomit_21, levels=c(0,1), labels = c("No","Yes")),
+    ae_non_serious_21 = factor(ae_non_serious_21, levels=c(0,1), labels = c("No","Yes")),
+    ae_ihps_28 = factor(ae_ihps_28, levels=c(0,1), labels = c("No","Yes")),
+    ae_death_28 = factor(ae_death_28, levels=c(0,1), labels = c("No","Yes")),
+    ae_hosp_28 = factor(ae_hosp_28, levels=c(0,1), labels = c("No","Yes")),
+    ae_serious_28 = factor(ae_serious_28, levels=c(0,1), labels = c("No","Yes")),
+    tx = factor(tx, levels = c("Azithromycin", "Placebo"))
+         )
+  
+d_ae_table %<>%
+  set_variable_labels(ae_fever_21 = "Fever",
+                      ae_abpain_21 = "Abdominal pain",
+                      ae_constip_21 = "Constipation",
+                      ae_rash_21 = "Rash",
+                      ae_diarrhea_21 = "Diarrhea",
+                      ae_vomiting_21 = "Vomiting (Any)",
+                      ae_vomitAfterfeeding_21 = "Vomiting after every feed",
+                      ae_projVomit_21 = "Projectile vomiting",
+                      ae_non_serious_21 = "Any non-serious adverse event",
+                      ae_ihps_28 = "Infantile hypertrophic pyloric stenosis",
+                      ae_death_28 = "Mortality within 28 days of treatment",
+                      ae_hosp_28 = "Hospitalization within 28 days of treatment",
+                      ae_serious_28 = "Any serious adverse event"
+                      ) 
+```
+
+## Tabulation of SAEs
+
+```{r}
+d_ae_table %>% 
+  table1(~ ae_serious_28 + ae_ihps_28 + ae_death_28 + ae_hosp_28 | tx, data = .)
+```
+
+\vspace{5em}
+
+## Tabulation of non-serious AEs
+
+```{r AEs at 21 days}
+d_ae_table %>% 
+  table1(~ ae_non_serious_21 + ae_vomiting_21 + ae_vomitAfterfeeding_21 + ae_projVomit_21 + ae_diarrhea_21 + ae_fever_21 + ae_abpain_21 +  ae_rash_21 + ae_constip_21 | tx, data = .)
+```
+
+## Differences between groups in SAEs
+
+```{r SAE differences between arms}
+#--------------------------
+# pivot the AE symptoms to
+# long format
+#--------------------------
+d_ael <- df_analysis %>% 
+  select(-c(ae_non_serious_21, ae_vomiting_21, ae_vomitAfterfeeding_21, 
+            ae_projVomit_21, ae_diarrhea_21, ae_fever_21, ae_abpain_21, 
+            ae_rash_21, ae_constip_21)) %>% 
+  group_by(childID,tx) %>%
+  select(childID,tx,starts_with("ae")) %>%
+  # reshape longer to make it easier to iterate the analysis
+  pivot_longer(cols=starts_with("ae_"),names_to = "ae_name",values_to = "ae") %>%
+  # ensure treatment assignment is a factor
+  # order ae_name according to the order we'd like in the table
+  mutate(ae_name = factor(ae_name, 
+                          levels = c("ae_serious_28", 
+                                     "ae_ihps_28",
+                                     "ae_death_28", "ae_hosp_28"), 
+                          labels = c("Any serious adverse event", 
+                                     "Infantile hypertrophic pyloric stenosis (IHPS)",
+                                     "Mortality within 28 days of treatment",
+                                     "Hospitalization within 28 days of treatment")
+                          )
+         )
+
+#--------------------------
+# summarize risk and risk
+# difference between arms
+# estimate the 95% CI using
+# a linear binomial model
+#--------------------------
+ae_rd_ests <- foreach(aei = levels(d_ael$ae_name),.combine = rbind) %do% {
+  # subset to the particular AE
+  di <- d_ael %>% filter(ae_name == aei)
+  # estimate Ns by arm
+  dns <- di %>% 
+    group_by(tx) %>%
+    summarize(N = n(), n = sum(ae, na.rm = TRUE), .groups = "keep")
+  
+  # return results
+  
+  ## Bootstrap the RD for IHPS to get 95% CIs because it is so rare
+  # note: this bootstrap intentionally does not exclude missing values
+  # in the denominator and estimate of the risk difference
+  # because IHPS was considered to be measured for all children in the trial
+  if (aei == "Infantile hypertrophic pyloric stenosis (IHPS)") {
+    set.seed(435352)
+    aeboot <- foreach(booti = 1:1000, .combine = rbind) %do% {
+         dii <- di[sample(1:nrow(di),replace=TRUE),]
+         ia_N <- length(dii$ae[dii$tx=="Azithromycin"])
+         ia_n <- sum(dii$ae[dii$tx=="Azithromycin"],na.rm=TRUE)
+         ip_N <- length(dii$ae[dii$tx=="Placebo"])
+         ip_n <- sum(dii$ae[dii$tx=="Placebo"],na.rm=TRUE)
+         rd <- (ia_n/ia_N) - (ip_n/ip_N)
+         return(rd)
+    }
+
+    pct_a <- dns$n[2]/dns$N[2]
+    pct_p <- dns$n[1]/dns$N[1]
+    rd <- pct_a - pct_p
+    rd_ci <- quantile(aeboot,probs=c(0.025,0.975))
+    res <- data.frame(ae_name = aei, 
+                      N_a = dns$N[2], n_a = dns$n[2], pct_a = pct_a*100,
+                      N_p = dns$N[1], n_p = dns$n[1], pct_p = pct_p*100,
+                      rd, rd_se = NA_real_, rd_min95 = rd_ci[1], rd_max95 = rd_ci[2]) 
+  } else {
+    
+  # fit a linear binomial model. coefficient on tx estimates the RD
+  fiti <- glm(ae ~ tx, data = di, family = binomial(link = "identity"))
+  sumi <- summary(fiti)
+  
+  # get the estimate and its SE
+  esti <- fiti$coefficients[2]
+  sei <- sqrt(diag(sumi$cov.unscaled)[2])
+  res <- data.frame(ae_name = aei, 
+                    N_a = dns$N[2], n_a = dns$n[2], pct_a = 100*dns$n[2]/dns$N[2],
+                    N_p = dns$N[1], n_p = dns$n[1], pct_p = 100*dns$n[1]/dns$N[1],
+                    rd = esti, rd_se = sei, rd_min95 = esti -1.96*sei, rd_max95 = esti + 1.96*sei)
+  }
+  
+  res
+}
+```
+
+```{r SAE summary table RDs}
+#--------------------------
+# print a summary table
+#--------------------------
+ae_rd_tab <- ae_rd_ests %>%
+  mutate(npct_a = paste0(n_a," (",sprintf("%1.2f",pct_a),"%)"),
+         npct_p = paste0(n_p," (",sprintf("%1.2f",pct_p),"%)"),
+         rd95ci = paste0(sprintf("%1.2f",rd*100),"% (", sprintf("%1.2f",rd_min95*100),"% to ",sprintf("%1.2f",rd_max95*100),"%)")
+         )
+
+knitr::kable(ae_rd_tab %>% select(ae_name,npct_a,npct_p,rd95ci),
+             align = "lrrr",
+             col.names = c("Serious Adverse Event", 
+                          paste0("Azithromycin", " \n N=", unique(ae_rd_ests$N_a), " n(%)"),
+                           paste0("Placebo", " \n N=", unique(ae_rd_ests$N_p), " n(%)"),
+                           "RD (95% CI) *"),
+             row.names = FALSE) %>%
+  kable_styling(bootstrap_options = "striped", full_width = TRUE) %>%
+  footnote(symbol = c("RD: risk difference (azithromycin - placebo), in percentage points. The 95% CI for IHPS was estimated with a non-parametric bootstrap (1000 iterations) due to the small number of events."))
+
+```
+
+
+## Differences between groups in AEs
+
+```{r AE differences between arms}
+#--------------------------
+# pivot the AE symptoms to
+# long format
+#--------------------------
+d_ael <- df_analysis %>% 
+  filter(an_ae == 1) %>% 
+  select(-c(ae_serious_28, ae_ihps_28, ae_death_28, ae_hosp_28)) %>% 
+  group_by(childID,tx) %>%
+  select(childID,tx,starts_with("ae")) %>%
+  # reshape longer to make it easier to iterate the analysis
+  pivot_longer(cols=starts_with("ae_"),names_to = "ae_name",values_to = "ae") %>%
+  # ensure treatment assignment is a factor
+  # order ae_name according to the order we'd like in the table
+  mutate(ae_name = factor(ae_name, 
+                          levels = c("ae_non_serious_21", "ae_vomiting_21",
+                                     "ae_vomitAfterfeeding_21", 
+                                     "ae_projVomit_21", 
+                                     "ae_diarrhea_21", "ae_fever_21","ae_abpain_21", 
+                                     "ae_rash_21", "ae_constip_21"),
+                          labels = c("Any non-serious adverse event", "Vomiting (Any)", "Vomiting after every feed", 
+                                     "Projectile vomiting", "Diarrhea", "Fever", "Abdominal Pain", "Rash", "Constipation")))
+
+#--------------------------
+# summarize risk and risk
+# difference between arms
+# estimate the 95% CI using
+# a linear binomial model
+#--------------------------
+ae_rd_ests <- foreach(aei = levels(d_ael$ae_name),.combine = rbind) %do% {
+  # subset to the particular AE
+  di <- d_ael %>% filter(ae_name == aei)
+  # estimate Ns by arm
+  dns <- di %>% 
+    group_by(tx) %>%
+    summarize(N = n(), n = sum(ae, na.rm = TRUE), .groups = "keep")
+  
+  # return results
+  
+  ## Bootstrap the RD for projectile vomiting to get 95% CIs because it is so rare
+  if (aei == "Projectile vomiting") {
+    set.seed(324324)
+    aeboot <- foreach(booti = 1:1000, .combine = rbind) %do% {
+         dii <- di[sample(1:nrow(di),replace=TRUE),]
+         ia_N <- length(dii$ae[dii$tx=="Azithromycin" & !is.na(dii$ae)])
+         ia_n <- sum(dii$ae[dii$tx=="Azithromycin"],na.rm=TRUE)
+         ip_N <- length(dii$ae[dii$tx=="Placebo" & !is.na(dii$ae)])
+         ip_n <- sum(dii$ae[dii$tx=="Placebo"],na.rm=TRUE)
+         rd <- (ia_n/ia_N) - (ip_n/ip_N)
+         return(rd)
+    }
+
+    pct_a <- dns$n[2]/dns$N[2]
+    pct_p <- dns$n[1]/dns$N[1]
+    rd <- pct_a - pct_p
+    rd_ci <- quantile(aeboot,probs=c(0.025,0.975))
+    res <- data.frame(ae_name = aei, 
+                      N_a = dns$N[2], n_a = dns$n[2], pct_a = pct_a*100,
+                      N_p = dns$N[1], n_p = dns$n[1], pct_p = pct_p*100,
+                      rd, rd_se = NA_real_, rd_min95 = rd_ci[1], rd_max95 = rd_ci[2] ) 
+
+  } else {
+    
+  # fit a linear binomial model. coefficient on tx estimates the RD
+  fiti <- glm(ae ~ tx, data = di, family = binomial(link = "identity"))
+  sumi <- summary(fiti)
+  
+  # get the estimate and its SE
+  esti <- fiti$coefficients[2]
+  sei <- sqrt(diag(sumi$cov.unscaled)[2])
+  res <- data.frame(ae_name = aei, 
+                    N_a = dns$N[2], n_a = dns$n[2], pct_a = 100*dns$n[2]/dns$N[2],
+                    N_p = dns$N[1], n_p = dns$n[1], pct_p = 100*dns$n[1]/dns$N[1],
+                    rd = esti, rd_se = sei, rd_min95 = esti -1.96*sei, rd_max95 = esti + 1.96*sei)
+  }
+  
+  res
+}
+```
+
+```{r AE summary table RDs}
+#--------------------------
+# print a summary table
+#--------------------------
+ae_rd_tab <- ae_rd_ests %>%
+  mutate(npct_a = paste0(n_a," (",sprintf("%1.2f",pct_a),"%)"),
+         npct_p = paste0(n_p," (",sprintf("%1.2f",pct_p),"%)"),
+         rd95ci = paste0(sprintf("%1.2f",rd*100),"% (", sprintf("%1.2f",rd_min95*100),"% to ",sprintf("%1.2f",rd_max95*100),"%)")
+         )
+
+knitr::kable(ae_rd_tab %>% select(ae_name,npct_a,npct_p,rd95ci),
+             align = "lrrr",
+             col.names = c("Adverse event", 
+                           paste0("Azithromycin", " \n N=", unique(ae_rd_ests$N_a), " n(%)"),
+                           paste0("Placebo", " \n N=", unique(ae_rd_ests$N_p), " n(%)"),
+                           "RD (95% CI) *"),
+             row.names = FALSE) %>%
+  kable_styling(bootstrap_options = "striped") %>%
+  footnote(symbol = c("RD: risk difference (azithromycin - placebo), in percentage points. The 95% CI for projectile vomiting was estimated with a non-parametric bootstrap (1000 iterations) due to the small number of events."))
+
+```
+
+
+
+# Session Info
+```{r session info}
+sessionInfo()
+```
+
