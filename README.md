@@ -6,9 +6,9 @@ Public repository for the primary mortality analysis of the NAITRE trial: Neonat
 
 This repo includes the R code to complete all analyses for the article:
 
-_Neonatal Azithromycin Administration for Prevention of Infant Mortality_, Oldenburg et al. _NEJM_ 2022.
+_Neonatal Azithromycin Administration for Prevention of Infant Mortality_, Oldenburg et al. _NEJM Evidence_ 2022. https://doi.org/10.1056/EVIDoa2100054
 
-Link:https://evidence.nejm.org/doi/full/10.1056/EVIDoa2100054 
+https://evidence.nejm.org/doi/full/10.1056/EVIDoa2100054 
 
 This repo is mirrored on the Open Science Framework (OSF), where we have additionally archived the study's datasets and computational notebook output files: https://osf.io/ujeyb/
 
