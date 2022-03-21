@@ -25,10 +25,10 @@ We have archived the `.html` output files from the final analysis as associated 
 
 All analyses were run using R software version 4.1.1 on Mac OSX Catalina using the RStudio IDE (https://www.rstudio.com).
 
-```> sessionInfo()```
-```R version 4.1.1 (2021-08-10)```
-```Platform: x86_64-apple-darwin17.0 (64-bit)```
-```Running under: macOS Catalina 10.15.7```
+```> sessionInfo()```   
+```R version 4.1.1 (2021-08-10)```   
+```Platform: x86_64-apple-darwin17.0 (64-bit)```   
+```Running under: macOS Catalina 10.15.7```   
 
 ## Installation Guide
 
