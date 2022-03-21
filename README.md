@@ -8,7 +8,7 @@ This repo includes the R code to complete all analyses for the article:
 
 _Neonatal Azithromycin Administration for Prevention of Infant Mortality_, Oldenburg et al. _NEJM_ 2022.
 
-Link:
+Link:https://evidence.nejm.org/doi/full/10.1056/EVIDoa2100054 
 
 This repo is mirrored on the Open Science Framework (OSF), where we have additionally archived the study's datasets and computational notebook output files: https://osf.io/ujeyb/
 
@@ -25,7 +25,10 @@ We have archived the `.html` output files from the final analysis as associated 
 
 All analyses were run using R software version 4.1.1 on Mac OSX Catalina using the RStudio IDE (https://www.rstudio.com).
 
-```> sessionInfo()``````R version 4.1.1 (2021-08-10)``````Platform: x86_64-apple-darwin17.0 (64-bit)``````Running under: macOS Catalina 10.15.7```
+```> sessionInfo()```
+```R version 4.1.1 (2021-08-10)```
+```Platform: x86_64-apple-darwin17.0 (64-bit)```
+```Running under: macOS Catalina 10.15.7```
 
 ## Installation Guide
 
